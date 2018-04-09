@@ -269,7 +269,6 @@ __global__ void computePressure(bufList buf, int pnum) {
     buf.mdensity[i] = 1.0f / sum;
 }
 
-
 /*__global__ void computeQuery ( bufList buf, int pnum )							//T: useless
 {
     uint i = __mul24(blockIdx.x, blockDim.x) + threadIdx.x;	// particle index
