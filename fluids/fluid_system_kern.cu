@@ -261,8 +261,9 @@ __global__ void computePressure ( bufList buf, int pnum )
 		
 	// Compute Density & Pressure
 	sum = sum * simData.pmass * simData.poly6kern;
-	if ( sum == 0.0 ) sum = 1.0;
-	buf.mpress[ i ] = ( sum - simData.prest_dens ) * simData.pintstiff;
+	if ( sum < 1.0 ) sum = 1.0;
+	// buf.mpress[ i ] = ( sum - simData.prest_dens ) * simData.pintstiff;
+	buf.mpress[i] = (powf(sum / simData.prest_dens, 7) - 1) * simData.pintstiff;
 	buf.mdensity[ i ] = 1.0f / sum;
 }
 
