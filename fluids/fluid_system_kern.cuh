@@ -60,6 +60,16 @@
 		uint*			mgndx;
 		uint*			mclr;			// 4 byte color
 
+		float3*			msfpos;
+		float3*			msfvel;
+		float3*			msfveleval;
+		float3*			msfforce;
+		float*			msfpress;
+		float*			msfdensity;		
+		uint*			msfgcell;
+		uint*			msfgndx;
+		uint*			msfclr;			// 4 byte color
+
 		uint*			mcluster;
 
 		char*			msortbuf;
@@ -84,10 +94,11 @@
 	// Fluid Parameters (stored on both host and device)
 	struct FluidParams {
 		int				numThreads, numBlocks;
+		int				numSFThreads, numSFBlocks;
 		int				gridThreads, gridBlocks;	
 
-		int				szPnts, szHash, szGrid;
-		int				stride, pnum;
+		int				szPnts, szSFPnts, szHash, szGrid;
+		int				stride, pnum, psfnum;
 		int				chk;
 		float			pdist, pmass, prest_dens;
 		float			pextstiff, pintstiff;

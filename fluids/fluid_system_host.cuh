@@ -73,11 +73,13 @@
 	void cudaExit();
 
 	void FluidClearCUDA ();
-	void FluidSetupCUDA (  int num, int gsrch, int3 res, float3 size, float3 delta, float3 gmin, float3 gmax, int total, int chk );
+	void FluidSetupCUDA (  int num, int sfnum, int gsrch, int3 res, float3 size, float3 delta, float3 gmin, float3 gmax, int total, int chk );
 	void FluidParamCUDA ( float ss, float sr, float pr, float mass, float rest, float3 bmin, float3 bmax, float estiff, float istiff, float visc, float damp, float fmin, float fmax, float ffreq, float gslope, float gx, float gy, float gz, float al, float vl );
 
-	void CopyToCUDA ( float* pos, float* vel, float* veleval, float* force, float* pressure, float* density, uint* cluster, uint* gnext, char* clr );
-	void CopyFromCUDA ( float* pos, float* vel, float* veleval, float* force, float* pressure, float* density, uint* cluster, uint* gnext, char* clr );
+	void CopyToCUDA ( float* pos, float* vel, float* veleval, float* force, float* pressure, float* density, uint* cluster, uint* gnext, char* clr,
+		float* sfpos, float* sfvel, float* sfveleval, float* sfforce, float* sfpressure, float* sfdensity, uint* sfcluster, uint* sfgnext, char* sfclr );
+	void CopyFromCUDA ( float* pos, float* vel, float* veleval, float* force, float* pressure, float* density, uint* cluster, uint* gnext, char* clr,
+		float* sfpos, float* sfvel, float* sfveleval, float* sfforce, float* sfpressure, float* sfdensity, uint* sfcluster, uint* sfgnext, char* sfclr );
 	
 	void InsertParticlesCUDA ( uint* gcell, uint* ccell, int* gcnt );	
 	void PrefixSumCellsCUDA ( int* goff );

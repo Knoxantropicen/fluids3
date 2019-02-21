@@ -115,6 +115,9 @@
 	#define PTIME_TOGPU			45
 	#define PTIME_FROMGPU		46
 	#define PFORCE_FREQ			47
+
+	#define PSFNUM				48
+	#define PSTAT_PSFMEM		49
 	
 
 	// Vector params
@@ -181,10 +184,14 @@
 		void DrawCircle ( Vector3DF pos, float r, Vector3DF clr, Camera3D& cam );
 
 		// Particle Utilities
+		template <typename T>
+		void AllocateVal( T** mVal, int cnt, int nump );
 		void AllocateParticles ( int cnt );
+		void AllocateSFParticles ( int cnt );
 		int AddParticle ();
 		void AddEmit ( float spacing );
 		int NumPoints ()		{ return mNumPoints; }
+		int NumSFPoints ()		{ return mSFNumPoints; }
 		
 		// Setup
 		void Setup ( bool bStart );
@@ -196,6 +203,8 @@
 		void SetupAddVolume ( Vector3DF min, Vector3DF max, float spacing, float offs, int total );
 		void SetupGridAllocate ( Vector3DF min, Vector3DF max, float sim_scale, float cell_size, float border );
 		int ParseXML ( std::string name, int id, bool bStart );
+
+		void SetupAddSFVolume( Vector3DF min, Vector3DF max );
 
 		// Neighbor Search
 		void Search ();
@@ -261,12 +270,6 @@
 		void ComputeForceGrid ();				// O(kn) - spatial grid
 		void ComputeForceGridNC ();				// O(cn) - neighbor table		
 		
-
-		// GPU Support functions
-		void AllocatePackBuf ();
-		void PackParticles ();
-		void UnpackParticles ();
-
 		//void SPH_ComputePressureSlow ();			// O(n^2)	
 		//void SPH_ComputeForceSlow ();				// O(n^2)
 		//void SPH_ComputeForceGrid ();				// O(kn) - spatial grid
@@ -318,20 +321,36 @@
 		// Particle Buffers
 		int						mNumPoints;
 		int						mMaxPoints;
-		int						mGoodPoints;
 		Vector3DF*				mPos;
 		DWORD*					mClr;
 		Vector3DF*				mVel;
 		Vector3DF*				mVelEval;
-		unsigned short*			mAge;
 		float*					mPressure;
 		float*					mDensity;
 		Vector3DF*				mForce;
+
 		uint*					mGridCell;
 		uint*					mClusterCell;
 		uint*					mGridNext;
 		uint*					mNbrNdx;
 		uint*					mNbrCnt;
+
+		// Surface Paricle Buffers
+		int						mSFNumPoints;
+		int						mSFMaxPoints;
+		Vector3DF*				mSFPos;
+		DWORD*					mSFClr;
+		Vector3DF*				mSFVel;
+		Vector3DF*				mSFVelEval;
+		float*					mSFPressure;
+		float*					mSFDensity;
+		Vector3DF*				mSFForce;
+
+		uint*					mSFGridCell;
+		uint*					mSFClusterCell;
+		uint*					mSFGridNext;
+		uint*					mSFNbrNdx;
+		uint*					mSFNbrCnt;
 		
 		// Acceleration Grid
 		uint*					m_Grid;
@@ -351,6 +370,11 @@
 		int						m_NeighborMax;
 		int*					m_NeighborTable;
 		float*					m_NeighborDist;
+
+		int						m_SFNeighborNum;
+		int						m_SFNeighborMax;
+		int*					m_SFNeighborTable;
+		float*					m_SFNeighborDist;
 
 		char*					mPackBuf;
 		int*					mPackGrid;

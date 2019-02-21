@@ -55,11 +55,13 @@
 
 void FluidSystem::TransferToCUDA ()
 { 
-	CopyToCUDA ( (float*) mPos, (float*) mVel, (float*) mVelEval, (float*) mForce, mPressure, mDensity, mClusterCell, mGridNext, (char*) mClr ); 
+	CopyToCUDA ( (float*) mPos, (float*) mVel, (float*) mVelEval, (float*) mForce, mPressure, mDensity, mClusterCell, mGridNext, (char*) mClr,
+		 (float*) mSFPos, (float*) mSFVel, (float*) mSFVelEval, (float*) mSFForce, mSFPressure, mSFDensity, mSFClusterCell, mSFGridNext, (char*) mSFClr ); 
 }
 void FluidSystem::TransferFromCUDA ()	
 {
-	CopyFromCUDA ( (float*) mPos, (float*) mVel, (float*) mVelEval, (float*) mForce, mPressure, mDensity, mClusterCell, mGridNext, (char*) mClr );
+	CopyFromCUDA ( (float*) mPos, (float*) mVel, (float*) mVelEval, (float*) mForce, mPressure, mDensity, mClusterCell, mGridNext, (char*) mClr,
+		(float*) mSFPos, (float*) mSFVel, (float*) mSFVelEval, (float*) mSFForce, mSFPressure, mSFDensity, mSFClusterCell, mSFGridNext, (char*) mSFClr );
 }
 
 //------------------------------ Initialization
@@ -67,6 +69,10 @@ FluidSystem::FluidSystem ()
 {
 	mNumPoints = 0;
 	mMaxPoints = 0;
+
+	mSFNumPoints = 0;
+	mSFMaxPoints = 0;
+
 	mPackBuf = 0x0;
 	mPackGrid = 0x0;
 	mFP = 0x0;
@@ -75,27 +81,44 @@ FluidSystem::FluidSystem ()
 	mClr = 0x0;
 	mVel = 0x0;
 	mVelEval = 0x0;
-	mAge = 0x0;
 	mPressure = 0x0;
 	mDensity = 0x0;
 	mForce = 0x0;
+	mGridCell = 0x0;
 	mClusterCell = 0x0;
 	mGridNext = 0x0;
 	mNbrNdx = 0x0;
 	mNbrCnt = 0x0;
+
 	mSelected = -1;
 	m_Grid = 0x0;
 	m_GridCnt = 0x0;
+
+	mSFPos = 0x0;
+	mSFClr = 0x0;
+	mSFVel = 0x0;
+	mSFVelEval = 0x0;
+	mSFPressure = 0x0;
+	mSFForce = 0x0;
+	mSFGridCell = 0x0;
+	mSFClusterCell = 0x0;
+	mSFGridNext = 0x0;
+	mSFNbrNdx = 0x0;
+	mSFNbrCnt = 0x0;
 
 	m_Frame = 0;
 	
 	m_NeighborTable = 0x0;
 	m_NeighborDist = 0x0;
+
+	m_SFNeighborTable = 0x0;
+	m_SFNeighborDist = 0x0;
 	
 	m_Param [ PMODE ]		= RUN_CUDA_FULL;
 	m_Param [ PEXAMPLE ]	= 1;
 	m_Param [ PGRID_DENSITY ] = 2.0;
 	m_Param [ PNUM ]		= 65536 * 128;
+	m_Param [ PSFNUM ]		= 65536;
 
 
 	m_Toggle [ PDEBUG ]		=	false;
@@ -122,6 +145,7 @@ void FluidSystem::Setup ( bool bStart )
 
 	ClearNeighborTable ();
 	mNumPoints = 0;
+	mSFNumPoints = 0;
 	
 	SetupDefaultParams ();
 	
@@ -130,13 +154,14 @@ void FluidSystem::Setup ( bool bStart )
 	m_Param [PGRIDSIZE] = 2*m_Param[PSMOOTHRADIUS] / m_Param[PGRID_DENSITY];
 
 	AllocateParticles ( m_Param[PNUM] );
-	AllocatePackBuf ();
+	AllocateSFParticles ( m_Param[PSFNUM] );
 	
 	SetupKernels ();
 	
 	SetupSpacing ();
 
-	SetupAddVolume ( m_Vec[PINITMIN], m_Vec[PINITMAX], m_Param[PSPACING], 0.1, m_Param[PNUM] );													// Create the particles
+	SetupAddVolume ( m_Vec[PINITMIN], m_Vec[PINITMAX], m_Param[PSPACING], 0.1, m_Param[PNUM] );		// Create the particles
+	SetupAddSFVolume( m_Vec[PINITMIN], m_Vec[PINITMAX] );	// T: TODO!! TEMPORARY!!
 
 	SetupGridAllocate ( m_Vec[PVOLMIN], m_Vec[PVOLMAX], m_Param[PSIMSCALE], m_Param[PGRIDSIZE], 1.0 );	// Setup grid
 
@@ -146,7 +171,7 @@ void FluidSystem::Setup ( bool bStart )
 
 		Sleep ( 500 );
 		
-		FluidSetupCUDA ( NumPoints(), m_GridSrch, *(int3*)& m_GridRes, *(float3*)& m_GridSize, *(float3*)& m_GridDelta, *(float3*)& m_GridMin, *(float3*)& m_GridMax, m_GridTotal, (int) m_Vec[PEMIT_RATE].x );
+		FluidSetupCUDA ( NumPoints(), NumSFPoints(), m_GridSrch, *(int3*)& m_GridRes, *(float3*)& m_GridSize, *(float3*)& m_GridDelta, *(float3*)& m_GridMin, *(float3*)& m_GridMax, m_GridTotal, (int) m_Vec[PEMIT_RATE].x );
 
 		Sleep ( 500 );
 
@@ -181,7 +206,6 @@ void FluidSystem::Exit ()
 	free ( mClr );
 	free ( mVel );
 	free ( mVelEval );
-	free ( mAge );
 	free ( mPressure );
 	free ( mDensity );
 	free ( mForce );
@@ -191,11 +215,32 @@ void FluidSystem::Exit ()
 	free ( mNbrNdx );
 	free ( mNbrCnt );
 
+	free ( mSFPos );
+	free ( mSFClr );
+	free ( mSFVel );
+	free ( mSFVelEval );
+	free ( mSFPressure );
+	free ( mSFDensity );
+	free ( mSFForce );
+	free ( mSFClusterCell );
+	free ( mSFGridCell );
+	free ( mSFGridNext );
+	free ( mSFNbrNdx );
+	free ( mSFNbrCnt );
+
 	FluidClearCUDA();
 
 	cudaExit ();
 
 
+}
+
+template <typename T>
+void FluidSystem::AllocateVal( T** mVal, int cnt, int nump )
+{
+	T* srcVal = *mVal;
+	*mVal = (T*)	malloc ( cnt*sizeof(T) );
+	if ( srcVal != 0x0 )	{ memcpy ( *mVal, srcVal, nump *sizeof(T)); free ( srcVal ); }
 }
 
 
@@ -204,61 +249,44 @@ void FluidSystem::AllocateParticles ( int cnt )
 {
 	int nump = 0;		// number to copy from previous data
 
-	Vector3DF* srcPos = mPos;
-	mPos = (Vector3DF*)		malloc ( cnt*sizeof(Vector3DF) );
-	if ( srcPos != 0x0 )	{ memcpy ( mPos, srcPos, nump *sizeof(Vector3DF)); free ( srcPos ); }
+	AllocateVal<Vector3DF>(&mPos, cnt, nump);
+	AllocateVal<DWORD>(&mClr, cnt, nump);
+	AllocateVal<Vector3DF>(&mVel, cnt, nump);
+	AllocateVal<Vector3DF>(&mVelEval, cnt, nump);
+	AllocateVal<float>(&mPressure, cnt, nump);
+	AllocateVal<float>(&mDensity, cnt, nump);
+	AllocateVal<Vector3DF>(&mForce, cnt, nump);
+	AllocateVal<uint>(&mClusterCell, cnt, nump);
+	AllocateVal<uint>(&mGridCell, cnt, nump);
+	AllocateVal<uint>(&mGridNext, cnt, nump);
+	AllocateVal<uint>(&mNbrNdx, cnt, nump);
+	AllocateVal<uint>(&mNbrCnt, cnt, nump);
 
-	DWORD* srcClr = mClr;	
-	mClr = (DWORD*)			malloc ( cnt*sizeof(DWORD) );
-	if ( srcClr != 0x0 )	{ memcpy ( mClr, srcClr, nump *sizeof(DWORD)); free ( srcClr ); }
-	
-	Vector3DF* srcVel = mVel;
-	mVel = (Vector3DF*)		malloc ( cnt*sizeof(Vector3DF) );	
-	if ( srcVel != 0x0 )	{ memcpy ( mVel, srcVel, nump *sizeof(Vector3DF)); free ( srcVel ); }
-
-	Vector3DF* srcVelEval = mVelEval;
-	mVelEval = (Vector3DF*)	malloc ( cnt*sizeof(Vector3DF) );	
-	if ( srcVelEval != 0x0 ) { memcpy ( mVelEval, srcVelEval, nump *sizeof(Vector3DF)); free ( srcVelEval ); }
-
-	unsigned short* srcAge = mAge;
-	mAge = (unsigned short*) malloc ( cnt*sizeof(unsigned short) );
-	if ( srcAge != 0x0 )	{ memcpy ( mAge, srcAge, nump *sizeof(unsigned short)); free ( srcAge ); }
-
-	float* srcPress = mPressure;
-	mPressure = (float*) malloc ( cnt*sizeof(float) );
-	if ( srcPress != 0x0 ) { memcpy ( mPressure, srcPress, nump *sizeof(float)); free ( srcPress ); }	
-
-	float* srcDensity = mDensity;
-	mDensity = (float*) malloc ( cnt*sizeof(float) );
-	if ( srcDensity != 0x0 ) { memcpy ( mDensity, srcDensity, nump *sizeof(float)); free ( srcDensity ); }	
-
-	Vector3DF* srcForce = mForce;
-	mForce = (Vector3DF*)	malloc ( cnt*sizeof(Vector3DF) );
-	if ( srcForce != 0x0 )	{ memcpy ( mForce, srcForce, nump *sizeof(Vector3DF)); free ( srcForce ); }
-
-	uint* srcCell = mClusterCell;
-	mClusterCell = (uint*)	malloc ( cnt*sizeof(uint) );
-	if ( srcCell != 0x0 )	{ memcpy ( mClusterCell, srcCell, nump *sizeof(uint)); free ( srcCell ); }
-
-	uint* srcGCell = mGridCell;
-	mGridCell = (uint*)	malloc ( cnt*sizeof(uint) );
-	if ( srcGCell != 0x0 )	{ memcpy ( mGridCell, srcGCell, nump *sizeof(uint)); free ( srcGCell ); }
-
-	uint* srcNext = mGridNext;
-	mGridNext = (uint*)	malloc ( cnt*sizeof(uint) );
-	if ( srcNext != 0x0 )	{ memcpy ( mGridNext, srcNext, nump *sizeof(uint)); free ( srcNext ); }
-	
-	uint* srcNbrNdx = mNbrNdx;
-	mNbrNdx = (uint*)		malloc ( cnt*sizeof(uint) );
-	if ( srcNbrNdx != 0x0 )	{ memcpy ( mNbrNdx, srcNbrNdx, nump *sizeof(uint)); free ( srcNbrNdx ); }
-	
-	uint* srcNbrCnt = mNbrCnt;
-	mNbrCnt = (uint*)		malloc ( cnt*sizeof(uint) );
-	if ( srcNbrCnt != 0x0 )	{ memcpy ( mNbrCnt, srcNbrCnt, nump *sizeof(uint)); free ( srcNbrCnt ); }
-
-	m_Param[PSTAT_PMEM] = 68 * 2 * cnt;
+	m_Param[PSTAT_PMEM] = 72 * 2 * cnt;
 
 	mMaxPoints = cnt;
+}
+
+void FluidSystem::AllocateSFParticles ( int cnt )
+{
+	int nump = 0;		// number to copy from previous data
+
+	AllocateVal<Vector3DF>(&mSFPos, cnt, nump);
+	AllocateVal<DWORD>(&mSFClr, cnt, nump);
+	AllocateVal<Vector3DF>(&mSFVel, cnt, nump);
+	AllocateVal<Vector3DF>(&mSFVelEval, cnt, nump);
+	AllocateVal<float>(&mSFPressure, cnt, nump);
+	AllocateVal<float>(&mSFDensity, cnt, nump);
+	AllocateVal<Vector3DF>(&mSFForce, cnt, nump);
+	AllocateVal<uint>(&mSFClusterCell, cnt, nump);
+	AllocateVal<uint>(&mSFGridCell, cnt, nump);
+	AllocateVal<uint>(&mSFGridNext, cnt, nump);
+	AllocateVal<uint>(&mSFNbrNdx, cnt, nump);
+	AllocateVal<uint>(&mSFNbrCnt, cnt, nump);
+
+	m_Param[PSTAT_PSFMEM] = 72 * 2 * cnt;
+
+	mSFMaxPoints = cnt;
 }
 
 int FluidSystem::AddParticle ()
@@ -276,6 +304,16 @@ int FluidSystem::AddParticle ()
 	
 	mNumPoints++;
 	return n;
+}
+
+void FluidSystem::SetupAddSFVolume( Vector3DF min, Vector3DF max )
+{
+	// center spheres of radius lambda_c around each coarse particle
+	// sample points uniformly on these spheres
+	// retain points that do not fall inside any other sphere's volume
+	for (int i = 0; i < mNumPoints / 10; ++i) {
+		mSFNumPoints++;	// T: TODO!! TEMPORARY!!
+	}
 }
 
 void FluidSystem::SetupAddVolume ( Vector3DF min, Vector3DF max, float spacing, float offs, int total )
@@ -358,7 +396,6 @@ void FluidSystem::AddEmit ( float spacing )
 		*(mPos+n) = pos;
 		*(mVel+n) = dir;
 		*(mVelEval+n) = dir;
-		*(mAge+n) = 0;
 		*(mClr+n) = COLORA ( m_Time/10.0, m_Time/5.0, m_Time /4.0, 1 );
 	}
 }
@@ -668,77 +705,6 @@ void FluidSystem::Run (int width, int height)
 	m_Frame++;
 }
 
-void FluidSystem::AllocatePackBuf ()
-{
-	if ( mPackBuf != 0x0 ) free ( mPackBuf );	
-	mPackBuf = (char*) malloc ( sizeof(Fluid) * mMaxPoints );
-}
-
-//------- NOT CURRENTLY USED
-void FluidSystem::PackParticles ()
-{
-	// Bin particles in memory according to grid cells.
-	// This is equivalent to a partial bucket sort, as a GPU radix sort is not necessary.
-
-	int j;	
-	char* dat = mPackBuf;
-	int cnt = 0;
-
-	for (int c=0; c < m_GridTotal; c++) {
-		j = m_Grid[c];
-		mPackGrid[c] = cnt;
-		while ( j != -1 ) {
-			*(Vector3DF*) dat = *(mPos+j);			dat += sizeof(Vector3DF);
-			*(Vector3DF*) dat = *(mVel+j);			dat += sizeof(Vector3DF);
-			*(Vector3DF*) dat = *(mVelEval+j);		dat += sizeof(Vector3DF);
-			*(Vector3DF*) dat = *(mForce+j);		dat += sizeof(Vector3DF);
-			*(float*) dat =		*(mPressure+j);		dat += sizeof(float);
-			*(float*) dat =		*(mDensity+j);		dat += sizeof(float);
-			*(int*) dat =		*(mClusterCell+j);	dat += sizeof(int);					// search cell
-			*(int*) dat =		c;					dat += sizeof(int);					// container cell
-			*(DWORD*) dat =		*(mClr+j);			dat += sizeof(DWORD);
-			dat += sizeof(int);
-			j = *(mGridNext+j);
-			cnt++;
-		}
-	}
-	mGoodPoints = cnt;
-
-	//--- Debugging - Print packed particles
-	/*printf ( "\nPACKED\n" );
-	for (int n=cnt-30; n < cnt; n++ ) {
-		dat = mPackBuf + n*sizeof(Fluid);
-		printf ( " %d: %d, %d\n", n, *((int*) (dat+56)), *((int*) (dat+60)) );
-	}*/	
-}
-
-//------- NOT CURRENTLY USED
-void FluidSystem::UnpackParticles ()
-{
-	char* dat = mPackBuf;
-
-	Vector3DF*  ppos =		mPos;
-	Vector3DF*  pforce =	mForce;
-	Vector3DF*  pvel =		mVel;
-	Vector3DF*  pveleval =	mVelEval;
-	float*		ppress =	mPressure;
-	float*		pdens =		mDensity;
-	DWORD*		pclr =		mClr;
-
-	for (int n=0; n < mGoodPoints; n++ ) {
-		*ppos++ =		*(Vector3DF*) dat;		dat += sizeof(Vector3DF);
-		*pvel++ =		*(Vector3DF*) dat;		dat += sizeof(Vector3DF);
-		*pveleval++ =	*(Vector3DF*) dat;		dat += sizeof(Vector3DF);
-		*pforce++ =		*(Vector3DF*) dat;		dat += sizeof(Vector3DF);
-		*ppress++ =		*(float*) dat;			dat += sizeof(float);
-		*pdens++ =		*(float*) dat;			dat += sizeof(float);		
-		dat += sizeof(int);
-		dat += sizeof(int);
-		*pclr++ =		*(DWORD*) dat;			dat += sizeof(DWORD);
-		dat += sizeof(int);
-	}
-}
-
 void FluidSystem::DebugPrintMemory ()
 {
 	int psize = 4*sizeof(Vector3DF) + sizeof(DWORD) + sizeof(unsigned short) + 2*sizeof(float) + sizeof(int) + sizeof(int)+sizeof(int);
@@ -980,10 +946,16 @@ void FluidSystem::ClearNeighborTable ()
 {
 	if ( m_NeighborTable != 0x0 )	free (m_NeighborTable);
 	if ( m_NeighborDist != 0x0)		free (m_NeighborDist );
+	if ( m_SFNeighborTable != 0x0 )	free (m_SFNeighborTable);
+	if ( m_SFNeighborDist != 0x0 )	free (m_SFNeighborDist);
 	m_NeighborTable = 0x0;
 	m_NeighborDist = 0x0;
+	m_SFNeighborTable = 0x0;
+	m_SFNeighborDist = 0x0;
 	m_NeighborNum = 0;
 	m_NeighborMax = 0;
+	m_SFNeighborNum = 0;
+	m_SFNeighborMax = 0;
 }
 
 void FluidSystem::ResetNeighbors ()
@@ -2042,7 +2014,6 @@ void FluidSystem::RunPlayback ()
 	// Allocate extra memory if needed
 	if ( mNumPoints > mMaxPoints ) {
 		AllocateParticles ( mNumPoints );
-		AllocatePackBuf ();
 	}
 	
 	char*	dat = mPackBuf;		
@@ -2170,7 +2141,6 @@ void FluidSystem::DrawParticleInfo ( int p )
 
 	end2D ();
 }
-
 
 
 void FluidSystem::SetupKernels ()

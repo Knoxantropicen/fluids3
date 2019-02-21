@@ -76,6 +76,7 @@ Vector4DF	light[2], light_to[2];				// Light stuff
 float		light_fov;	
 
 int		psys_count = 16384;
+int		psys_sfcount = 16384;
 int		psys_rate = 0;							// Particle stuff
 int		psys_freq = 1;
 int		psys_playback;
@@ -253,6 +254,7 @@ void display ()
 	// Check for slider interaction
 	if ( guiChanged(2) ) {	
 		psys.SetParam ( PNUM, psys_count, 4, 40000000 );
+		psys.SetParam ( PSFNUM, psys_sfcount, 4, 4000000 );
 		psys.Setup ( false );
 	}
 	if ( guiChanged(3) ) 	psys.SetVec ( PPLANE_GRAV_DIR, Vector3DF(0,-gravity,0) );
@@ -591,6 +593,7 @@ void init ()
 	
 	// Get initial number of particle (from scene XML)
 	psys_count = psys.GetParam ( PNUM );
+	psys_sfcount = psys.GetParam( PSFNUM );
 }
 
 
